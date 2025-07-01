@@ -1,0 +1,334 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Конвертер текста<br><a href="https://300.ya.ru/" target="_blank">Яндекс-пересказ</a> → Obsidian (.md)</title>
+  <link rel="icon" href="https://avatars.githubusercontent.com/u/nauka-explain">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .light-theme {
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .dark-theme {
+      background-color: #1a1a1a;
+      color: #e0e0e0;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      text-align: center;
+      line-height: 1.5;
+    }
+    h1 a {
+      color: #007bff;
+      text-decoration: none;
+    }
+    h1 a:hover {
+      text-decoration: underline;
+    }
+    .dark-theme h1 a {
+      color: #4a90e2;
+    }
+    .container {
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+      margin-top: 40px;
+    }
+    .theme-toggle {
+      margin-bottom: 20px;
+    }
+    .theme-toggle input {
+      display: none;
+    }
+    .theme-toggle label {
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      padding: 8px 16px;
+      border-radius: 20px;
+      background-color: #ddd;
+      transition: background-color 0.3s;
+    }
+    .dark-theme .theme-toggle label {
+      background-color: #444;
+    }
+    .theme-toggle span {
+      font-size: 20px;
+      margin: 0 8px;
+    }
+    .theme-toggle .slider {
+      width: 40px;
+      height: 20px;
+      background-color: #fff;
+      border-radius: 10px;
+      position: relative;
+      transition: background-color 0.3s;
+    }
+    .theme-toggle .slider::before {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background-color: #666;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.3s;
+    }
+    #theme-toggle:checked + .slider::before {
+      transform: translateX(20px);
+    }
+    .dark-theme .theme-toggle .slider::before {
+      background-color: #bbb;
+    }
+    button {
+      width: 180px;
+      height: 100px;
+      padding: 12px;
+      font-size: 18px;
+      font-weight: 500;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 0 10px;
+      transition: background-color 0.3s, transform 0.1s;
+      display: inline-flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      line-height: 1.5;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    .light-theme button {
+      background-color: #007bff;
+      color: white;
+    }
+    .light-theme button:hover {
+      background-color: #0056b3;
+    }
+    .dark-theme button {
+      background-color: #4a90e2;
+      color: white;
+    }
+    .dark-theme button:hover {
+      background-color: #357abd;
+    }
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .notification.show {
+      opacity: 1;
+    }
+    .success {
+      background-color: #28a745;
+    }
+    .error {
+      background-color: #dc3545;
+    }
+    footer {
+      font-size: 14px;
+      font-style: italic;
+      text-align: center;
+      color: #666;
+      margin-top: 250px;
+      margin-bottom: 20px;
+    }
+    .dark-theme footer {
+      color: #999;
+    }
+    footer a {
+      color: #007bff;
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+    .dark-theme footer a {
+      color: #4a90e2;
+    }
+    footer br {
+      display: block;
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body class="light-theme">
+  <h1>Конвертер текста<br><a href="https://300.ya.ru/" target="_blank">Яндекс-пересказ</a> → Obsidian (.md)</h1>
+  <div class="theme-toggle">
+    <label>
+      <span>☀️</span>
+      <input type="checkbox" id="theme-toggle">
+      <span class="slider"></span>
+      <span>🌙</span>
+    </label>
+  </div>
+  <div class="container">
+    <button onclick="pasteText()">Вставить<br>исходный текст</button>
+    <button onclick="copyFormattedText()">Скопировать<br>markdown (.md)</button>
+  </div>
+  <footer>
+    Программа подготовлена специально для телеграм-канала
+    <a href="https://t.me/nauka_explain" target="_blank">Поясни за науку</a>.<br>
+    При создании использовался ИИ. Перед использованием вы соглашаетесь с
+    <a href="https://t.me/nauka_explain/31" target="_blank">этими правилами</a>.
+  </footer>
+  <div id="notification" class="notification"></div>
+
+  <script>
+    let storedText = '';
+
+    // Set initial theme based on system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.remove('light-theme');
+      document.body.classList.add('dark-theme');
+      document.getElementById('theme-toggle').checked = true;
+    }
+
+    // Theme toggle functionality
+    document.getElementById('theme-toggle').addEventListener('change', () => {
+      document.body.classList.toggle('light-theme');
+      document.body.classList.toggle('dark-theme');
+    });
+
+    // Show notification
+    function showNotification(message, type) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.className = `notification ${type} show`;
+      setTimeout(() => {
+        notification.className = 'notification';
+      }, 2000);
+    }
+
+    // Paste text from clipboard
+    async function pasteText() {
+      try {
+        storedText = await navigator.clipboard.readText();
+        showNotification('Текст успешно вставлен', 'success');
+      } catch (err) {
+        showNotification('Ошибка при вставке текста', 'error');
+      }
+    }
+
+    // Format text to Markdown
+    function formatToMarkdown(text) {
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      let output = [];
+      let currentSection = null;
+
+      const timeRegex = /^(\d{2}:\d{2}:\d{2}|\d{2}:\d{2})/; // Matches 00:00:00 or 00:00
+      const bulletRegex = /^•\s+/; // Matches bullet points
+
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+
+        if (timeRegex.test(line)) {
+          // Extract section title (remove timestamp)
+          const sectionTitle = line.replace(timeRegex, '').trim();
+          if (sectionTitle) {
+            currentSection = sectionTitle;
+            output.push(`- **${sectionTitle}**`);
+          }
+        } else if (bulletRegex.test(line)) {
+          // Format bullet point with proper indentation
+          const bulletText = line.replace(bulletRegex, '').trim();
+          if (bulletText && currentSection) {
+            output.push(`\t- ${bulletText}`);
+          }
+        } else if (!output.length) {
+          // Add title at the start
+          output.push(line);
+          output.push('');
+        }
+      }
+
+      return output.join('\n');
+    }
+
+    // Copy formatted text
+    async function copyFormattedText() {
+      if (!storedText) {
+        showNotification('Вставленный текст пуст', 'error');
+        return;
+      }
+
+      try {
+        const formattedText = formatToMarkdown(storedText);
+        if (!formattedText.includes('- **') || !formattedText.includes('\t-')) {
+          showNotification('Текст не соответствует ожидаемому формату', 'error');
+          return;
+        }
+        await navigator.clipboard.writeText(formattedText);
+        showNotification('Текст успешно скопирован', 'success');
+      } catch (err) {
+        showNotification('Ошибка при копировании текста', 'error');
+      }
+    }
+  </script>
+</body>
+</html>
